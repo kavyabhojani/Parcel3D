@@ -2,11 +2,11 @@
 Synthetic scene generator for small 3D point clouds.
 
 Why this exists:
-- You need quick, controllable data to iterate on clustering logic.
+- Need quick, controllable data to iterate on clustering logic.
 - Scenes contain a few primitive objects (sphere, cube, cylinder) with noise/outliers.
-- We output: points (N,3), ground-truth boxes (M,6) as AABB in world frame, and metadata.
+- Output: points (N,3), ground-truth boxes (M,6) as AABB in world frame, and metadata.
 
-Key ideas you can explain:
+Ideas to explain:
 - Surfaces are sampled directly (no meshes).
 - Each object gets a random pose (rotation + translation).
 - AABB (axis-aligned) of transformed points is the GT box.

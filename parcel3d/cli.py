@@ -2,25 +2,25 @@
 Small CLI to:
   1) generate synthetic scenes
   2) run baseline detection (voxel -> suggest eps -> DBSCAN -> AABB)
-  3) optionally plot and/or save a figure
+  3) optionally plot and/or save a figure, and print evaluation metrics
 
-You can run as:
+Run examples:
   python -m parcel3d.cli generate --scene easy
-  python -m parcel3d.cli detect examples/scene_easy.npz --voxel 0.05 --min-samples 12 --plot --save figs/easy_baseline.png
+  python -m parcel3d.cli detect examples/scene_easy.npz --voxel 0.05 --min-samples 12 --metrics --plot --save figs/easy_eval.png
 """
 
 from __future__ import annotations
-import argparse, os, sys
+import argparse, os
 import numpy as np
 
-from data.synthetic import (
+from .data.synthetic import (
     make_synthetic_scene_easy,
     make_synthetic_scene_dense,
     save_scene_npz,
 )
-from pipeline.voxel import voxel_downsample_with_stats
-from pipeline.cluster import suggest_eps_kdist, dbscan_cluster, extract_aabbs
-from viz.plot3d import plot_points_and_boxes
+from .pipeline.voxel import voxel_downsample_with_stats
+from .pipeline.cluster import suggest_eps_kdist, dbscan_cluster, extract_aabbs
+from .viz.plot3d import plot_points_and_boxes
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
@@ -42,7 +42,8 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     # ---- load scene ----
     data = np.load(args.input, allow_pickle=True)
     points = data["points"]
-    print(f"[detect] loaded {args.input}  points={len(points):,}")
+    gt_boxes = data["gt_boxes"] if "gt_boxes" in data.files else np.zeros((0, 6), dtype=np.float32)
+    print(f"[detect] loaded {args.input}  points={len(points):,}  gt_boxes={len(gt_boxes)}")
 
     # ---- voxel downsample ----
     pts_ds, stats = voxel_downsample_with_stats(points, voxel_size=args.voxel, seed=args.seed)
@@ -54,7 +55,8 @@ def _cmd_detect(args: argparse.Namespace) -> int:
         eps = float(args.eps)
         print(f"[eps] using user-provided eps={eps:.4f}")
     else:
-        eps = suggest_eps_kdist(pts_ds, k=args.min_samples, subsample=args.subsample, percentile=args.percentile, seed=args.seed)
+        eps = suggest_eps_kdist(pts_ds, k=args.min_samples, subsample=args.subsample,
+                                percentile=args.percentile, seed=args.seed)
         print(f"[eps] suggest_eps_kdist: k={args.min_samples} percentile={args.percentile} → eps≈{eps:.4f}")
 
     # ---- clustering ----
@@ -63,17 +65,27 @@ def _cmd_detect(args: argparse.Namespace) -> int:
     n_clusters = int(np.sum(np.unique(labels) >= 0))
     print(f"[dbscan] clusters={n_clusters}  noise_points={n_noise:,}")
 
-    # ---- boxes ----
+    # ---- boxes (AABB) ----
     boxes = extract_aabbs(pts_ds, labels, min_points=args.min_points)
     print("[boxes] AABB (xmin, ymin, zmin, xmax, ymax, zmax):")
     for i, b in enumerate(boxes):
         print(f"  #{i}: " + " ".join(f"{v:.3f}" for v in b))
 
+    # ---- evaluation (AABB) ----
+    if args.metrics:
+        from .eval.match import evaluate_detections  # local import to keep CLI fast when metrics aren't requested
+        res = evaluate_detections(boxes, gt_boxes, thresholds=list(args.iou_thresholds))
+        print(f"[eval] mIoU over matched pairs: {res.mIoU_matched:.3f}")
+        print("[eval] IoU threshold sweep:")
+        for row in res.table:
+            print(f"  IoU≥{row['iou_thr']:.2f}  TP={int(row['tp'])}  FP={int(row['fp'])}  FN={int(row['fn'])}  "
+                  f"Prec={row['prec']:.3f}  Rec={row['rec']:.3f}  F1={row['f1']:.3f}")
+
     # ---- optional plot ----
     if args.plot or args.save:
         title = f"AABB baseline — eps={eps:.3f}, min_samples={args.min_samples}, voxel={args.voxel}"
         save_path = args.save if args.save else None
-        plot_points_and_boxes(pts_ds, labels, boxes, title=title, save_path=save_path)
+        plot_points_and_boxes(pts_ds, labels, boxes, title=title, save_path=save_path, gt_boxes=gt_boxes)
         if save_path:
             print(f"[plot] saved figure to {save_path}")
 
@@ -102,6 +114,9 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--plot", action="store_true", help="show a 3D plot")
     d.add_argument("--save", type=str, default=None, help="save plot to this path (e.g., figs/easy_baseline.png)")
     d.add_argument("--seed", type=int, default=42)
+    d.add_argument("--metrics", action="store_true", help="compute PR/F1 and mIoU (AABB)")
+    d.add_argument("--iou-thresholds", type=float, nargs="+", default=[0.25, 0.35, 0.5],
+                   help="IoU thresholds for the sweep (e.g., 0.25 0.5)")
     d.set_defaults(func=_cmd_detect)
 
     return p
