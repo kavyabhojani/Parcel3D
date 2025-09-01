@@ -1,4 +1,4 @@
-# Parcel3D — Clustering-based 3D Object Detection (Small Clouds)
+# Parcel3D: Clustering-based 3D Object Detection (Small Clouds)
 
 **Goal**  
 Given a 3D point cloud `[N, 3]` with multiple objects, return **approximate bounding boxes** for each object:  
