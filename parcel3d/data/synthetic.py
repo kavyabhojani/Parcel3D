@@ -1,12 +1,11 @@
 """
 Synthetic scene generator for small 3D point clouds.
 
-Why this exists:
+Why:
 - Need quick, controllable data to iterate on clustering logic.
 - Scenes contain a few primitive objects (sphere, cube, cylinder) with noise/outliers.
 - Output: points (N,3), ground-truth boxes (M,6) as AABB in world frame, and metadata.
 
-Ideas to explain:
 - Surfaces are sampled directly (no meshes).
 - Each object gets a random pose (rotation + translation).
 - AABB (axis-aligned) of transformed points is the GT box.
@@ -28,8 +27,7 @@ class ObjSpec:
     rot_deg: Tuple[float, float, float] = (0, 0, 0)  # Euler XYZ rotation in degrees
 
 
-# ---------- small helpers: rotations and rigid transform ----------
-
+#small helpers: rotations and rigid transform 
 def _deg2rad(e):
     return np.deg2rad(e)
 
@@ -51,7 +49,7 @@ def _apply_pose(points: np.ndarray, center, rot_deg) -> np.ndarray:
     return (R @ points.T).T + np.asarray(center)[None, :]
 
 
-# ---------- primitive surface samplers ----------
+#primitive surface samplers
 
 def _sample_sphere_surface(radius: float, n: int, rng: np.random.Generator) -> np.ndarray:
     """Sample random directions, normalize to unit sphere, scale by radius."""
@@ -93,7 +91,7 @@ def _sample_cylinder_surface(radius: float, height: float, n: int, rng: np.rando
     return np.vstack([side, caps])
 
 
-# ---------- utilities ----------
+#utilities
 
 def _aabb(points: np.ndarray) -> np.ndarray:
     """Axis-aligned bounding box [xmin, ymin, zmin, xmax, ymax, zmax] for a set of points."""
@@ -151,7 +149,7 @@ def make_scene_from_specs(specs: List[ObjSpec], outlier_ratio: float, outlier_sc
 
     return points.astype(np.float32), gt_boxes.astype(np.float32), meta
 
-# ---------- ready-made scenes for the first day ----------
+#ready-made scenes for the first day
 
 def make_synthetic_scene_easy(seed: int = 0):
     """Two separated objects, light noise, few outliers."""
