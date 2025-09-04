@@ -4,7 +4,7 @@ Small CLI to:
   2) run baseline detection (voxel -> suggest eps -> DBSCAN -> AABB)
   3) optionally plot and/or save a figure, and print evaluation metrics
 
-Run examples:
+Run
   python -m parcel3d.cli generate --scene easy
   python -m parcel3d.cli detect examples/scene_easy.npz --voxel 0.05 --min-samples 12 --metrics --plot --save figs/easy_eval.png
 """
@@ -39,18 +39,18 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 def _cmd_detect(args: argparse.Namespace) -> int:
-    # ---- load scene ----
+    # load scene
     data = np.load(args.input, allow_pickle=True)
     points = data["points"]
     gt_boxes = data["gt_boxes"] if "gt_boxes" in data.files else np.zeros((0, 6), dtype=np.float32)
     print(f"[detect] loaded {args.input}  points={len(points):,}  gt_boxes={len(gt_boxes)}")
 
-    # ---- voxel downsample ----
+    #voxel downsample
     pts_ds, stats = voxel_downsample_with_stats(points, voxel_size=args.voxel, seed=args.seed)
     print(f"[voxel] input={stats['input_count']:,}  output={stats['output_count']:,}  "
           f"ratio={stats['reduction_ratio']:.3f}  mean_nn≈{stats['approx_mean_nn_spacing']:.4f} m")
 
-    # ---- eps selection ----
+    #eps selection
     if args.eps is not None:
         eps = float(args.eps)
         print(f"[eps] using user-provided eps={eps:.4f}")
@@ -59,19 +59,19 @@ def _cmd_detect(args: argparse.Namespace) -> int:
                                 percentile=args.percentile, seed=args.seed)
         print(f"[eps] suggest_eps_kdist: k={args.min_samples} percentile={args.percentile} → eps≈{eps:.4f}")
 
-    # ---- clustering ----
+    #clustering
     labels = dbscan_cluster(pts_ds, eps=eps, min_samples=args.min_samples)
     n_noise = int(np.sum(labels == -1))
     n_clusters = int(np.sum(np.unique(labels) >= 0))
     print(f"[dbscan] clusters={n_clusters}  noise_points={n_noise:,}")
 
-    # ---- boxes (AABB) ----
+    #boxes (AABB) 
     boxes = extract_aabbs(pts_ds, labels, min_points=args.min_points)
     print("[boxes] AABB (xmin, ymin, zmin, xmax, ymax, zmax):")
     for i, b in enumerate(boxes):
         print(f"  #{i}: " + " ".join(f"{v:.3f}" for v in b))
 
-    # ---- evaluation (AABB) ----
+    #evaluation (AABB)
     if args.metrics:
         from .eval.match import evaluate_detections  # local import to keep CLI fast when metrics aren't requested
         res = evaluate_detections(boxes, gt_boxes, thresholds=list(args.iou_thresholds))
@@ -81,7 +81,7 @@ def _cmd_detect(args: argparse.Namespace) -> int:
             print(f"  IoU≥{row['iou_thr']:.2f}  TP={int(row['tp'])}  FP={int(row['fp'])}  FN={int(row['fn'])}  "
                   f"Prec={row['prec']:.3f}  Rec={row['rec']:.3f}  F1={row['f1']:.3f}")
 
-    # ---- optional plot ----
+    #optional plot
     if args.plot or args.save:
         title = f"AABB baseline — eps={eps:.3f}, min_samples={args.min_samples}, voxel={args.voxel}"
         save_path = args.save if args.save else None
@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="parcel3d", description="Parcel3D: clustering-based 3D object detection (baseline).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    # generate
+    #generate
     g = sub.add_parser("generate", help="generate a synthetic scene (.npz)")
     g.add_argument("--scene", choices=["easy", "dense"], default="easy")
     g.add_argument("--seed", type=int, default=42)
